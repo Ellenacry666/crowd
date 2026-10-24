@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+  GATE_STAFF
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  FINISHED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  CANCELLED
+  EXPIRED
+}
+
+enum CheckInResult {
+  SUCCESS
+  ALREADY_USED
+  INVALID_TOKEN
+  NOT_PAID
+  CANCELLED_OR_EXPIRED
+  WRONG_EVENT
+  NOT_AUTHORIZED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders           Order[]
+  ticketsOwned     Ticket[]          @relation("TicketOwner")
+  ticketsCheckedIn Ticket[]          @relation("TicketCheckedInBy")
+  checkInLogs      CheckInLog[]
+  staffAssignments StaffAssignment[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Event {
+  id          String      @id @default(uuid()) @db.Uuid
+  title       String
+  slug        String      @unique
+  category    String
+  description String      @db.Text
+  location    String
+  startAt     DateTime
+  endAt       DateTime
+  posterUrl   String?
+  status      EventStatus @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  ticketCategories TicketCategory[]
+  tickets          Ticket[]
+  checkInLogs      CheckInLog[]
+  staffAssignments StaffAssignment[]
+
+  @@index([status, startAt])
+  @@index([category])
+  @@map("events")
+}
+
+model TicketCategory {
+  id            String   @id @default(uuid()) @db.Uuid
+  eventId       String   @db.Uuid
+  name          String
+  price         Int
+  quota         Int
+  soldCount     Int      @default(0)
+  reservedCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event      Event       @relation(fields: [eventId], references: [id])
+  orderItems OrderItem[]
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@map("ticket_categories")
+}
+
+model Order {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @db.Uuid
+  orderNumber String      @unique
+  totalAmount Int
+  status      OrderStatus @default(PENDING)
+  expiresAt   DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user     User                 @relation(fields: [userId], references: [id])
+  items    OrderItem[]
+  payments PaymentTransaction[]
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String @id @default(uuid()) @db.Uuid
+  orderId          String @db.Uuid
+  ticketCategoryId String @db.Uuid
+  quantity         Int
+  unitPrice        Int
+  subtotal         Int
+
+  order          Order          @relation(fields: [orderId], references: [id])
+  ticketCategory TicketCategory @relation(fields: [ticketCategoryId], references: [id])
+  tickets        Ticket[]
+
+  @@index([orderId])
+  @@index([ticketCategoryId])
+  @@map("order_items")
+}
+
+model PaymentTransaction {
+  id        String        @id @default(uuid()) @db.Uuid
+  orderId   String        @db.Uuid
+  method    String
+  status    PaymentStatus @default(PENDING)
+  reference String        @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@map("payment_transactions")
+}
+
+model Ticket {
+  id            String       @id @default(uuid()) @db.Uuid
+  orderItemId   String       @db.Uuid
+  eventId       String       @db.Uuid
+  ownerId       String       @db.Uuid
+  ticketCode    String       @unique
+  qrVersion     Int          @default(1)
+  status        TicketStatus @default(ACTIVE)
+  issuedAt      DateTime     @default(now())
+  checkedInAt   DateTime?
+  checkedInById String?      @db.Uuid
+
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
+  event       Event        @relation(fields: [eventId], references: [id])
+  owner       User         @relation("TicketOwner", fields: [ownerId], references: [id])
+  checkedInBy User?        @relation("TicketCheckedInBy", fields: [checkedInById], references: [id])
+  checkInLogs CheckInLog[]
+
+  @@index([ownerId])
+  @@index([eventId, status])
+  @@index([orderItemId])
+  @@map("tickets")
+}
+
+model CheckInLog {
+  id        String        @id @default(uuid()) @db.Uuid
+  ticketId  String?       @db.Uuid
+  eventId   String        @db.Uuid
+  staffId   String        @db.Uuid
+  result    CheckInResult
+  reason    String?
+  scannedAt DateTime      @default(now())
+
+  ticket Ticket? @relation(fields: [ticketId], references: [id])
+  event  Event   @relation(fields: [eventId], references: [id])
+  staff  User    @relation(fields: [staffId], references: [id])
+
+  @@index([eventId, scannedAt])
+  @@index([staffId, scannedAt])
+  @@index([ticketId])
+  @@map("checkin_logs")
+}
+
+model StaffAssignment {
+  staffId   String   @db.Uuid
+  eventId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  staff User  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, eventId])
+  @@index([eventId])
+  @@map("staff_assignments")
+}

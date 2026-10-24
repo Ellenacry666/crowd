@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: crowdpulse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crowdpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crowdpulse_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-crowdpulse}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - crowdpulse_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crowdpulse} -d ${POSTGRES_DB:-crowdpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  crowdpulse_pgdata:
