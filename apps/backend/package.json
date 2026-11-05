@@ -15,6 +15,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
+    "sim:crowd": "tsx scripts/simulate-crowd.ts",
     "test:db:migrate": "dotenv -e .env.test -- prisma migrate deploy",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand"
   },

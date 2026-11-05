@@ -41,6 +41,11 @@ enum TicketStatus {
   EXPIRED
 }
 
+enum CameraType {
+  GATE
+  CROWD
+}
+
 enum CheckInResult {
   SUCCESS
   ALREADY_USED
@@ -89,6 +94,9 @@ model Event {
   tickets          Ticket[]
   checkInLogs      CheckInLog[]
   staffAssignments StaffAssignment[]
+  cameras          Camera[]
+  crowdSnapshots   CrowdSnapshot[]
+  lineups          Lineup[]
 
   @@index([status, startAt])
   @@index([category])
@@ -127,6 +135,7 @@ model Order {
   user     User                 @relation(fields: [userId], references: [id])
   items    OrderItem[]
   payments PaymentTransaction[]
+  photos   OrderPhoto[]
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])
@@ -176,11 +185,13 @@ model Ticket {
   issuedAt      DateTime     @default(now())
   checkedInAt   DateTime?
   checkedInById String?      @db.Uuid
+  holderPhotoId String?      @unique @db.Uuid
 
   orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
   event       Event        @relation(fields: [eventId], references: [id])
   owner       User         @relation("TicketOwner", fields: [ownerId], references: [id])
   checkedInBy User?        @relation("TicketCheckedInBy", fields: [checkedInById], references: [id])
+  holderPhoto OrderPhoto?  @relation(fields: [holderPhotoId], references: [id])
   checkInLogs CheckInLog[]
 
   @@index([ownerId])
@@ -219,4 +230,88 @@ model StaffAssignment {
   @@id([staffId, eventId])
   @@index([eventId])
   @@map("staff_assignments")
+}
+
+/// Foto pemegang tiket (satu per tiket). Diunggah saat order PENDING, ditautkan ke Ticket saat PAID.
+model OrderPhoto {
+  id         String   @id @default(uuid()) @db.Uuid
+  orderId    String   @db.Uuid
+  slot       Int
+  storageKey String   @unique
+  mimeType   String
+  sizeBytes  Int
+  sha256     String
+  consentAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  order  Order   @relation(fields: [orderId], references: [id])
+  ticket Ticket?
+
+  @@unique([orderId, slot])
+  @@unique([orderId, sha256])
+  @@map("order_photos")
+}
+
+/// Kamera analitik per acara. Maksimal satu GATE (pintu masuk) dan satu CROWD (area penonton) per acara.
+/// Layanan analisis (computer vision) mengirim hasil hitung lewat API key kamera, bukan JWT.
+model Camera {
+  id         String     @id @default(uuid()) @db.Uuid
+  eventId    String     @db.Uuid
+  type       CameraType
+  name       String
+  streamUrl  String?
+  /// Kapasitas aman area (orang). Dipakai untuk menghitung level kepadatan kamera CROWD.
+  capacity   Int?
+  apiKeyHash String     @unique
+  isActive   Boolean    @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  event     Event           @relation(fields: [eventId], references: [id])
+  snapshots CrowdSnapshot[]
+
+  @@unique([eventId, type])
+  @@map("cameras")
+}
+
+/// Satu hasil analisis kamera pada satu waktu.
+/// CROWD: peopleCount = jumlah orang di area. GATE: inCount/outCount = orang masuk/keluar sejak snapshot sebelumnya.
+model CrowdSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  cameraId    String   @db.Uuid
+  eventId     String   @db.Uuid
+  capturedAt  DateTime
+  peopleCount Int      @default(0)
+  inCount     Int      @default(0)
+  outCount    Int      @default(0)
+  /// Orang per meter persegi (opsional).
+  density     Float?
+  createdAt   DateTime @default(now())
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  event  Event  @relation(fields: [eventId], references: [id])
+
+  @@index([cameraId, capturedAt])
+  @@index([eventId, capturedAt])
+  @@map("crowd_snapshots")
+}
+
+/// Jadwal penampil. Analisis kerumunan saat penampil tampil memakai kamera CROWD acara tersebut.
+model Lineup {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @db.Uuid
+  artistName  String
+  isGuestStar Boolean  @default(false)
+  startAt     DateTime
+  endAt       DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@index([eventId, startAt])
+  @@map("lineups")
 }

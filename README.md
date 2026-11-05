@@ -1,6 +1,6 @@
-# CrowdPulse Ticketing — Tahap 2 (Backend Dasar)
+# CrowdPulse Ticketing — Tahap 1 sampai 4 (Backend + Website)
 
-Monorepo: `apps/backend` (NestJS + Prisma + PostgreSQL). `apps/web` dan `apps/mobile` dibuat di Tahap 4 dan 5.
+Monorepo: `apps/backend` (NestJS + Prisma + PostgreSQL). `apps/web` (React + Vite + Tailwind, Tahap 4, lihat `apps/web/README.md`) dan `apps/mobile` (Flutter, Tahap 5, belum dibuat).
 
 Dokumen perencanaan Tahap 1: `docs/architecture/tahap-1-perencanaan.md`, `docs/api/endpoints.md`, `docs/testing/test-strategy.md`.
 
@@ -56,6 +56,24 @@ npm run start:dev
 | CUSTOMER | customer@crowdpulse.test | Customer123! |
 
 ## Catatan
-- Endpoint `/admin/ping`, `/staff/ping`, `/customer/ping` hanya untuk membuktikan RBAC dan akan dihapus di Tahap 3.
+- Endpoint sementara `/admin/ping`, `/staff/ping`, `/customer/ping` sudah dihapus; RBAC diuji pada endpoint asli.
+- Tahap 3 tidak menambah dependensi baru dan tidak menambah migration. Cukup salin kode baru, lalu jalankan build dan test.
+- Kontrak API untuk web dan APK: `docs/api/contract.md`.
 - Setelah mengubah `schema.prisma`, gunakan `npm run db:migrate` (bukan `migrate deploy`).
 - Migration `init` ditulis tangan (termasuk CHECK constraint). Jika `prisma migrate dev` meminta membuat migration tambahan karena perbedaan kecil, kirimkan outputnya.
+
+## Pembaruan: foto pemegang tiket (anti-calo)
+Dokumen keputusan dan batasannya: `docs/architecture/fitur-foto-pemegang-tiket.md`.
+Menambah migration baru, jadi **hentikan backend lebih dulu** (agar file Prisma tidak terkunci di Windows), lalu di `apps\backend`:
+```cmd
+npx prisma migrate deploy
+npx prisma generate
+npm run test:db:migrate
+```
+Opsional: tambahkan `UPLOAD_DIR=./storage/photos` ke `.env` (nilai bawaan sudah sama). Folder `storage/` tidak boleh di-commit.
+
+## Website (Tahap 4)
+Lihat `apps/web/README.md`. Test case manual: `docs/testing/web-test-cases.md`.
+
+## Aplikasi petugas (Tahap 5)
+Lihat `apps/mobile/README.md` (setup: `scripts\setup-mobile.cmd`). Test case manual: `docs/testing/mobile-test-cases.md`.

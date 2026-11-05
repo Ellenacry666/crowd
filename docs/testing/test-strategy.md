@@ -26,8 +26,39 @@ Tidak ada klaim "berhasil" tanpa bukti.
 11. QR yang sama dipindai kembali dan ditolak.
 12. Status tiket dan riwayat check-in sesuai hasil yang diharapkan.
 
-## Test yang sudah ada (Tahap 2)
-- Unit: `apps/backend/src/auth/auth.service.spec.ts` (6 test)
-- E2E: `apps/backend/test/auth-rbac.e2e-spec.ts` (health, registrasi, login/JWT, matriks RBAC)
+## Test otomatis yang sudah ada
 
-Hasil aktual: **belum diisi**, menunggu eksekusi di mesin pengembang.
+| Berkas | Jenis | Cakupan |
+|---|---|---|
+| `src/auth/auth.service.spec.ts` | Unit (6) | Login, register, hash argon2, email duplikat |
+| `src/common/qr/qr-signer.spec.ts` | Unit (6) | Kode tiket acak, payload HMAC, deteksi pemalsuan |
+| `test/auth-rbac.e2e-spec.ts` | E2E | Registrasi, login, JWT, token palsu, akun nonaktif, matriks RBAC |
+| `test/events-categories.e2e-spec.ts` | E2E | CRUD acara, slug, validasi, akses publik, kategori, kuota, penghapusan |
+| `test/orders-payments.e2e-spec.ts` | E2E + concurrency | Harga dari DB, reservasi stok, pembayaran sukses/gagal, tiket terbit, kedaluwarsa, kepemilikan data, overselling paralel, pembayaran ganda paralel |
+| `test/checkin.e2e-spec.ts` | E2E + concurrency | Alur lengkap, semua hasil penolakan, otorisasi petugas, check-in ganda paralel, riwayat |
+| `test/staff-reports.e2e-spec.ts` | E2E | Akun petugas, penugasan, penonaktifan, laporan |
+| `test/checkin-preview.e2e-spec.ts` | E2E | Pratinjau tidak mengubah status/log, data minimal (tanpa email/token), alur dua langkah, penolakan tanpa kebocoran, otorisasi |
+| `test/ticket-limit.e2e-spec.ts` | E2E + concurrency | Batas 5 tiket per akun per acara: kumulatif lintas order, PAID dan PENDING dihitung, FAILED/kedaluwarsa mengembalikan jatah, acara dan akun lain tidak terpengaruh, 8 order paralel tidak menembus batas, endpoint jatah |
+| `test/photos.e2e-spec.ts` | E2E | Syarat foto per tiket sebelum bayar, validasi unggahan (tipe sejati, ukuran, persetujuan, slot, duplikat), penggantian foto, penghapusan saat gagal/kedaluwarsa, hak akses melihat foto |
+| `src/photos/image-validation.spec.ts` | Unit (3) | Deteksi tipe gambar dari magic bytes |
+
+## Pemetaan ke kriteria keberhasilan
+
+| Kriteria | Dicakup oleh |
+|---|---|
+| SC-01 RBAC admin | auth-rbac (matriks), events-categories, orders-payments, staff-reports |
+| SC-02 kepemilikan data | orders-payments "Kepemilikan data" |
+| SC-03 harga dari DB | orders-payments "harga selalu dari database" |
+| SC-04 tanpa overselling | orders-payments "Concurrency" (2 test) |
+| SC-05 tiket hanya setelah PAID | orders-payments (belum bayar, FAILED, EXPIRED) |
+| SC-06 check-in ganda paralel | checkin "Concurrency" |
+| SC-07 scan kedua tidak mengubah data | checkin "alur lengkap" |
+| SC-08 semua penolakan tercatat | checkin "Penolakan" dan "Otorisasi" |
+| SC-09 APK offline | Tahap 5 (manual) |
+| SC-10 E2E 12 langkah | Bagian backend: checkin "alur lengkap"; Web dan APK di Tahap 4-6 |
+| SC-11 flag simulasi | orders-payments "flag PAYMENT_SIMULATION_ENABLED=false" |
+| SC-12 tanpa rahasia di repo | Review manual |
+
+## Hasil aktual
+
+**Belum diisi.** Tabel hasil (PASS/FAIL beserta bukti) dibuat setelah test dijalankan di mesin pengembang. Perintah: `npm test` dan `npm run test:e2e` di `apps/backend`.

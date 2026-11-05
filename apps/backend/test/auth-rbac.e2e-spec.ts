@@ -1,10 +1,9 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
 import { Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
+import { createTestApp, resetDatabase } from './helpers';
 import { API_PREFIX } from '../src/common/constants';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -26,13 +25,9 @@ describe('Auth & RBAC (e2e)', () => {
   }
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
-    app.setGlobalPrefix(API_PREFIX);
-    await app.init();
-
+    app = await createTestApp();
     prisma = app.get(PrismaService);
-    await prisma.user.deleteMany(); // aman: setup-env menjamin ini database *_test
+    await resetDatabase(prisma); // aman: setup-env menjamin ini database *_test
 
     const passwordHash = await argon2.hash(PASSWORD);
     await prisma.user.createMany({
@@ -53,7 +48,7 @@ describe('Auth & RBAC (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany();
+    await resetDatabase(prisma);
     await app.close();
   });
 
@@ -148,7 +143,7 @@ describe('Auth & RBAC (e2e)', () => {
       }).signAsync({ sub: customer.id, role: 'ADMIN' });
 
       const res = await request(app.getHttpServer())
-        .get(url('/admin/ping'))
+        .get(url('/admin/events'))
         .set('Authorization', `Bearer ${forged}`);
       expect(res.status).toBe(401);
     });
@@ -171,44 +166,30 @@ describe('Auth & RBAC (e2e)', () => {
   describe('RBAC', () => {
     const matrix: Array<[string, string, number]> = [
       // [path, user email (atau 'none'), expected status]
-      ['/admin/ping', 'none', 401],
-      ['/admin/ping', 'admin@e2e.local', 200],
-      ['/admin/ping', 'customer@e2e.local', 403],
-      ['/admin/ping', 'staff@e2e.local', 403],
-      ['/staff/ping', 'none', 401],
-      ['/staff/ping', 'staff@e2e.local', 200],
-      ['/staff/ping', 'admin@e2e.local', 403],
-      ['/staff/ping', 'customer@e2e.local', 403],
-      ['/customer/ping', 'customer@e2e.local', 200],
-      ['/customer/ping', 'admin@e2e.local', 403],
-      ['/customer/ping', 'staff@e2e.local', 403],
+      ['/admin/events', 'none', 401],
+      ['/admin/events', 'admin@e2e.local', 200],
+      ['/admin/events', 'customer@e2e.local', 403],
+      ['/admin/events', 'staff@e2e.local', 403],
+      ['/staff/events', 'none', 401],
+      ['/staff/events', 'staff@e2e.local', 200],
+      ['/staff/events', 'admin@e2e.local', 403],
+      ['/staff/events', 'customer@e2e.local', 403],
+      ['/tickets/my', 'customer@e2e.local', 200],
+      ['/tickets/my', 'admin@e2e.local', 403],
+      ['/tickets/my', 'staff@e2e.local', 403],
     ];
 
-    
     it.each(matrix)('%s sebagai %s -> %i', async (path, email, expected) => {
-      let token: string | undefined;
-
-      // Dapatkan token terlebih dahulu sebelum membuat request RBAC.
-      if (email !== 'none') {
-        token = await tokenOf(email);
-      }
-
-      // Buat request setelah proses login selesai.
       const req = request(app.getHttpServer()).get(url(path));
-
-      if (token) {
-        req.set('Authorization', `Bearer ${token}`);
-      }
-
+      if (email !== 'none') req.set('Authorization', `Bearer ${await tokenOf(email)}`);
       const res = await req;
       expect(res.status).toBe(expected);
     });
 
-
     it('respons 403 memakai format error seragam', async () => {
       const token = await tokenOf('customer@e2e.local');
       const res = await request(app.getHttpServer())
-        .get(url('/admin/ping'))
+        .get(url('/admin/events'))
         .set('Authorization', `Bearer ${token}`);
       expect(res.body).toMatchObject({ statusCode: 403, error: 'FORBIDDEN', code: 'FORBIDDEN' });
     });
